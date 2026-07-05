@@ -1,0 +1,4 @@
+requests>=2.31
+PyYAML>=6.0
+# Solo necesario para modo LIVE (--execute):
+# py-clob-client>=0.34
