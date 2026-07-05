@@ -1,15 +1,22 @@
-# tradings — Bot BTC 5m Polymarket (versión autocontenida)
+# tradings — Bot BTC 5m Polymarket
 
-Bot para los mercados **BTC Up/Down de 5 minutos** de Polymarket, basado en la
-estrategia "momentum into close" del repo viral
-[Novals83/5min-btc-polymarket](https://github.com/Novals83/5min-btc-polymarket),
-pero **autocontenido** (el original depende de un motor de ejecución privado no
-publicado) y con el filtro de impulso de BTC realmente implementado.
+Bot propio para los mercados **BTC Up/Down de 5 minutos** de Polymarket, con
+dos estrategias:
 
-> ⚠️ **Lee [ANALISIS.md](ANALISIS.md) antes de usar esto.** No hay ninguna
-> evidencia de que esta estrategia sea rentable. El modo por defecto es
-> simulación (sin dinero real) — úsalo durante semanas antes de plantearte
-> siquiera el modo live.
+- **`fair_value` (la nuestra, por defecto)**: modelo de volatilidad que calcula
+  la probabilidad justa de UP/DOWN y solo entra cuando el mercado está mal
+  valorado por un margen mínimo. Diseño completo en
+  [ESTRATEGIA.md](ESTRATEGIA.md), incluido el plan por fases para validarla
+  con datos antes de arriesgar dinero.
+- **`threshold`**: la estrategia "momentum into close" del repo viral
+  [Novals83/5min-btc-polymarket](https://github.com/Novals83/5min-btc-polymarket)
+  (analizado en [ANALISIS.md](ANALISIS.md)), implementada correctamente y
+  autocontenida, para comparar contra la nuestra.
+
+> ⚠️ Ninguna estrategia tiene rentabilidad garantizada. El modo por defecto es
+> simulación (sin dinero real); el flujo de trabajo es: grabar datos →
+> evaluar ventaja → paper trading → (solo si todo es positivo) live con
+> importes mínimos.
 
 ## Instalación
 
@@ -18,17 +25,36 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Uso — modo simulación (por defecto, sin dinero)
+## Flujo de trabajo
+
+### 1. Grabar datos de calibración ($0 en riesgo)
 
 ```bash
-# Sesión de 1h con el perfil conservador
+python -m btc5m.record --hours 24    # dejar corriendo días (288 intervalos/día)
+```
+
+### 2. Evaluar si hay ventaja
+
+```bash
+python -m btc5m.evaluate
+```
+
+Imprime la calibración del modelo (Brier score vs. mercado) y el PnL
+hipotético por nivel de `min_edge`. **Si el modelo no bate al mercado, no hay
+ventaja y no se deposita dinero.**
+
+### 3. Paper trading (por defecto, sin dinero)
+
+```bash
+# Nuestra estrategia
+python -m btc5m --profile fair_value --session-minutes 480
+
+# Variante exigente (menos entradas, más ventaja mínima)
+python -m btc5m --profile fair_value_strict
+
+# Comparar contra el estilo del repo viral
 python -m btc5m --profile conservative
-
-# Perfil que replica el comportamiento real del repo original (sin filtro de impulso)
 python -m btc5m --profile novals83_original
-
-# Sesión más larga
-python -m btc5m --profile conservative --session-minutes 480
 ```
 
 Cada operación simulada se registra en `runtime/trades.jsonl` con señal,
@@ -36,22 +62,11 @@ precio de entrada (ask real del libro), motivo de salida y P&L según la
 resolución real del mercado. El P&L diario acumulado y el contador de
 operaciones viven en `runtime/risk_state.json`.
 
-## Estrategia
+Cada operación simulada queda en `runtime/trades.jsonl`; los límites diarios
+en `runtime/risk_state.json`. Perfiles en
+[`config/profiles.yaml`](config/profiles.yaml).
 
-Por cada ventana de 5 minutos:
-
-1. **Ventana de entrada**: entre 150s y 60s antes del cierre.
-2. **Señal**: el ask de un lado (UP/DOWN) ≥ 0.70 **y** BTC ya se movió ≥ $70
-   en esa misma dirección dentro del intervalo (precio de Kraken en tiempo real).
-3. **Guardas**: spread ≤ 0.03, liquidez mínima en el ask, límites diarios de
-   pérdida y de número de operaciones.
-4. **Gestión**: stop-loss (25–30% desde la entrada) contra el bid; salida por
-   resolución (`hold`, por defecto) o venta 20s antes del cierre
-   (`before_close`, como el repo original).
-
-Perfiles configurables en [`config/profiles.yaml`](config/profiles.yaml).
-
-## Modo live (dinero real) — bajo tu responsabilidad
+### 4. Modo live (dinero real) — solo tras validar, bajo tu responsabilidad
 
 Requiere `pip install py-clob-client`, una wallet de Polygon con USDC en
 Polymarket y un `.env` basado en [`.env.example`](.env.example):
@@ -70,10 +85,14 @@ primero una orden pequeña manualmente.
 ```
 btc5m/
   data.py       # Gamma API, libro de órdenes CLOB, precio BTC (Kraken)
-  strategy.py   # señal: umbral + filtro de impulso + guardas de liquidez
+  model.py      # modelo de probabilidad (fair value del binario)
+  strategy.py   # señales: fair_value (nuestra) y threshold (repo viral)
   runner.py     # bucle principal, stop-loss, salidas, registro
   executor.py   # ejecución paper (default) y live (py-clob-client)
   risk.py       # límites diarios persistentes
+  record.py     # grabador de datos de calibración (python -m btc5m.record)
+  evaluate.py   # Brier score y PnL hipotético (python -m btc5m.evaluate)
 config/profiles.yaml
-ANALISIS.md     # revisión completa del repo viral y de la estrategia
+ESTRATEGIA.md   # diseño de nuestra estrategia y plan de validación por fases
+ANALISIS.md     # revisión del repo viral y de sus promesas
 ```

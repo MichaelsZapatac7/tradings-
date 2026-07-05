@@ -1,25 +1,45 @@
-# Perfiles de riesgo del bot BTC 5m (Polymarket Up/Down).
+# Perfiles del bot BTC 5m (Polymarket Up/Down).
 # Todos los importes en USD. El modo por defecto es SIMULACION (paper);
-# nada de esto opera con dinero real sin --execute y credenciales.
+# nada opera con dinero real sin --execute y credenciales.
 
 profiles:
-  conservative:
-    threshold: 0.70              # ask minimo del lado favorito para entrar
-    min_entry_seconds_left: 60   # no entrar con menos de 60s restantes
-    max_entry_seconds_left: 150  # ventana de entrada: ~2 min antes del cierre
-    btc_move_min_usd: 70         # impulso minimo de BTC en el intervalo
-    require_btc_move: true
+  # ============ NUESTRA ESTRATEGIA (fair value / valor justo) ============
+  # Modelo de volatilidad que calcula la probabilidad real de UP/DOWN y solo
+  # entra cuando el precio del mercado esta equivocado por >= min_edge.
+  # Simetrica: puede comprar al no-favorito barato o al favorito infravalorado.
+  fair_value:
+    signal_mode: fair_value
+    min_edge: 0.06               # ventaja minima modelo-vs-mercado para entrar
+    min_entry_seconds_left: 45
+    max_entry_seconds_left: 240
     max_spread: 0.03
     min_top_ask_notional_usd: 30
+    max_entry_price: 0.97        # nunca comprar por encima de 0.97
     stake_usd: 5
-    stop_loss_pct: 0.25
-    exit_mode: hold              # hold = esperar resolucion (sin pagar spread de salida)
-    exit_before_sec: 20
+    stop_loss_pct: 0.50          # stop laxo: la tesis es de valor, no de momentum
+    exit_mode: hold              # mantener hasta resolucion (no pagar spread de salida)
     session_minutes: 60
     daily_max_loss_usd: 15
-    max_trades_per_day: 12
+    max_trades_per_day: 15
 
-  aggressive:
+  fair_value_strict:             # version exigente: menos entradas, mas ventaja
+    signal_mode: fair_value
+    min_edge: 0.10
+    min_entry_seconds_left: 45
+    max_entry_seconds_left: 240
+    max_spread: 0.02
+    min_top_ask_notional_usd: 50
+    max_entry_price: 0.95
+    stake_usd: 5
+    stop_loss_pct: 0.50
+    exit_mode: hold
+    session_minutes: 60
+    daily_max_loss_usd: 10
+    max_trades_per_day: 10
+
+  # ============ Momentum-into-close (estilo repo viral) ============
+  conservative:
+    signal_mode: threshold
     threshold: 0.70
     min_entry_seconds_left: 60
     max_entry_seconds_left: 150
@@ -27,10 +47,27 @@ profiles:
     require_btc_move: true
     max_spread: 0.03
     min_top_ask_notional_usd: 30
+    max_entry_price: 0.97
+    stake_usd: 5
+    stop_loss_pct: 0.25
+    exit_mode: hold
+    session_minutes: 60
+    daily_max_loss_usd: 15
+    max_trades_per_day: 12
+
+  aggressive:
+    signal_mode: threshold
+    threshold: 0.70
+    min_entry_seconds_left: 60
+    max_entry_seconds_left: 150
+    btc_move_min_usd: 70
+    require_btc_move: true
+    max_spread: 0.03
+    min_top_ask_notional_usd: 30
+    max_entry_price: 0.97
     stake_usd: 10
     stop_loss_pct: 0.30
     exit_mode: hold
-    exit_before_sec: 20
     session_minutes: 60
     daily_max_loss_usd: 25
     max_trades_per_day: 20
@@ -38,6 +75,7 @@ profiles:
   # Replica del comportamiento real del repo original Novals83
   # (solo umbral de precio, sin filtro de impulso, salida antes del cierre).
   novals83_original:
+    signal_mode: threshold
     threshold: 0.70
     min_entry_seconds_left: 60
     max_entry_seconds_left: 300
@@ -45,6 +83,7 @@ profiles:
     require_btc_move: false
     max_spread: 1.0
     min_top_ask_notional_usd: 0
+    max_entry_price: 1.0
     stake_usd: 5
     stop_loss_pct: 0.25
     exit_mode: before_close

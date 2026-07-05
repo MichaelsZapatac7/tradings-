@@ -53,8 +53,10 @@ def run_session(sp: StrategyParams, rp: RunnerParams, runtime_dir: Path) -> None
     ex = make_executor(rp.execute)
     risk = RiskManager(runtime_dir, rp.daily_max_loss_usd, rp.max_trades_per_day)
     deadline = time.time() + rp.session_minutes * 60
-    print(f"[btc5m] mode={ex.mode} session={rp.session_minutes}min "
-          f"stake=${rp.stake_usd} exit={rp.exit_mode} threshold={sp.threshold}")
+    sig_desc = (f"fair_value(min_edge={sp.min_edge})" if sp.signal_mode == "fair_value"
+                else f"threshold({sp.threshold})")
+    print(f"[btc5m] mode={ex.mode} signal={sig_desc} session={rp.session_minutes}min "
+          f"stake=${rp.stake_usd} exit={rp.exit_mode}")
 
     while time.time() < deadline:
         allowed, why = risk.can_trade()

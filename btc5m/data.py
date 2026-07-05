@@ -126,18 +126,26 @@ def order_book(token_id: str) -> tuple[Optional[float], Optional[float], float, 
     return best_bid, best_ask, bid_notional, ask_notional
 
 
-def btc_move_in_slot(slot_open_ts: int) -> Optional[float]:
-    """Signed BTC-USD move (current price - price at slot open) via Kraken 1m OHLC.
+def kraken_1m_candles() -> Optional[list]:
+    """Kraken 1m OHLC rows, oldest first, including the in-progress candle.
 
-    Kraken serves the in-progress candle in real time (Binance is geo-blocked
+    Kraken serves the current candle in real time (Binance is geo-blocked
     from many hosts and Coinbase candles lag ~5 minutes).
-    Row format: [time, open, high, low, close, vwap, volume, count], oldest first.
+    Row format: [time, open, high, low, close, vwap, volume, count].
     """
     try:
         d = _get(KRAKEN_OHLC, params={"pair": "XBTUSD", "interval": 1})
         key = next(k for k in d["result"] if k != "last")
-        rows = d["result"][key]
+        return d["result"][key]
     except Exception:
+        return None
+
+
+def btc_move_in_slot(slot_open_ts: int, rows: Optional[list] = None) -> Optional[float]:
+    """Signed BTC-USD move (current price - price at slot open)."""
+    if rows is None:
+        rows = kraken_1m_candles()
+    if not rows:
         return None
     open_px = None
     prev_close = None

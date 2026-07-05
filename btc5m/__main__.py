@@ -1,4 +1,5 @@
 import argparse
+import dataclasses
 from pathlib import Path
 
 import yaml
@@ -16,39 +17,37 @@ def load_profile(name: str) -> dict:
     return profiles[name]
 
 
+def _from_profile(cls, profile: dict, overrides: dict):
+    fields = {f.name for f in dataclasses.fields(cls)}
+    kwargs = {k: v for k, v in profile.items() if k in fields}
+    kwargs.update({k: v for k, v in overrides.items() if k in fields and v is not None})
+    return cls(**kwargs)
+
+
 def main() -> None:
-    ap = argparse.ArgumentParser(prog="btc5m", description="BTC 5m Polymarket momentum bot")
-    ap.add_argument("--profile", default="conservative")
+    ap = argparse.ArgumentParser(prog="btc5m", description="BTC 5m Polymarket bot")
+    ap.add_argument("--profile", default="fair_value",
+                    help="profile from config/profiles.yaml (default: fair_value)")
     ap.add_argument("--stake-usd", type=float)
+    ap.add_argument("--min-edge", type=float)
     ap.add_argument("--threshold", type=float)
     ap.add_argument("--session-minutes", type=int)
     ap.add_argument("--exit-mode", choices=["hold", "before_close"])
-    ap.add_argument("--no-btc-move-filter", action="store_true",
-                    help="disable the BTC impulse confirmation (replicates original Novals83 behavior)")
     ap.add_argument("--execute", action="store_true",
                     help="LIVE trading with real money. Default is paper simulation.")
     args = ap.parse_args()
 
     p = load_profile(args.profile)
-    sp = StrategyParams(
-        threshold=args.threshold or p["threshold"],
-        min_entry_seconds_left=p["min_entry_seconds_left"],
-        max_entry_seconds_left=p["max_entry_seconds_left"],
-        btc_move_min_usd=p["btc_move_min_usd"],
-        require_btc_move=not args.no_btc_move_filter and p.get("require_btc_move", True),
-        max_spread=p["max_spread"],
-        min_top_ask_notional_usd=p["min_top_ask_notional_usd"],
-    )
-    rp = RunnerParams(
-        stake_usd=args.stake_usd or p["stake_usd"],
-        stop_loss_pct=p["stop_loss_pct"],
-        exit_mode=args.exit_mode or p.get("exit_mode", "hold"),
-        exit_before_sec=p.get("exit_before_sec", 20),
-        session_minutes=args.session_minutes or p.get("session_minutes", 60),
-        daily_max_loss_usd=p["daily_max_loss_usd"],
-        max_trades_per_day=p["max_trades_per_day"],
-        execute=args.execute,
-    )
+    overrides = {
+        "stake_usd": args.stake_usd,
+        "min_edge": args.min_edge,
+        "threshold": args.threshold,
+        "session_minutes": args.session_minutes,
+        "exit_mode": args.exit_mode,
+    }
+    sp = _from_profile(StrategyParams, p, overrides)
+    rp = _from_profile(RunnerParams, p, overrides)
+    rp.execute = args.execute
     if rp.execute:
         print("*** LIVE MODE: real orders will be placed on Polymarket. ***")
     runtime = Path(__file__).resolve().parents[1] / "runtime"
